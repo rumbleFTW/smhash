@@ -1,5 +1,11 @@
 extern crate clipboard;
+extern crate ring;
 
+// use ring::aead::*;
+// use ring::pbkdf2::*;
+// use ring::rand::SystemRandom;
+use hex;
+use sha2::{Sha512, Digest};
 use std::env;
 use std::fs;
 use clipboard::ClipboardProvider;
@@ -13,6 +19,20 @@ struct Credentials {
     username: Vec<String>,
     password: Vec<String>,
     text: String,
+}
+
+fn authenticate() -> bool {
+
+    // Authenticates the master password
+
+    let hashed_master = fs::read_to_string("/Users/rumbleftw/Documents/Codes/smhash/src/MASTER").expect("MASTER file missing!");
+    let mut passwd: String = String::new();
+    println!("Enter your shash Master Password:");
+    std::io::stdin().read_line(&mut passwd).unwrap();
+    let mut hasher = Sha512::new();
+    hasher.update(passwd);
+    let hashed_pass = hex::encode(hasher.finalize());
+    return hashed_pass == hashed_master;
 }
 
 fn load_creds() -> Credentials {
@@ -73,25 +93,54 @@ fn get(query: String, creds: Credentials, verbose: bool) {
     ctx.set_contents(creds.password[idx as usize].to_owned()).unwrap();
 }
 
+fn add() {
+    let mut payload: String = fs::read_to_string("/Users/rumbleftw/Documents/Codes/smhash/src/VAULT").expect("VAULT file missing! :/");
+    println!("Enter the Credential service:");
+    println!("Enter the Username/ID:");
+    println!("Enter the Password:");
+    payload = payload + &"\nHalo".to_string();
+    fs::write("/Users/rumbleftw/Documents/Codes/smhash/src/VAULT", payload).expect("Could not update VAULT file :/");
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     println!("Args recieved: {:?}", args);
     let query = &args[1];
     if query == "dump" {
-        let creds = load_creds();
-        println!("{}", creds.text);
-    }
-    else if query == "search" {
-        let creds = load_creds();
-        search("net".to_string(), &creds);
+        if authenticate() {
+            let creds = load_creds();
+            println!("{}", creds.text);
+        }
+        else {
+            println!("Invalid Master Password!");
+        } 
     }
 
+    // else if query == "search" {
+    //     let creds = load_creds();
+    //     search("net".to_string(), &creds);
+    // }
+
     else if query == "get" {
-        let creds = load_creds();
-        let mut v: bool = false;
-        if args.contains(&"-v".to_string()) {
-            v = true;
+        if authenticate() {
+            let creds = load_creds();
+            let mut v: bool = false;
+            if args.contains(&"-v".to_string()) {
+                v = true;
+            }
+            get(args[2].to_string(), creds, v);
         }
-        get(args[2].to_string(), creds, v);
+        else {
+            println!("Invalid Master Password!");
+        }
+    }
+
+    else if query == "add" {
+        if authenticate() {
+            add();
+        }
+        else {
+            println!("Invalid Master Password!");
+        }
     }
 }
