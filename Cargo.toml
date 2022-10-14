@@ -7,6 +7,6 @@ edition = "2021"
 
 [dependencies]
 clipboard = "0.5.0"
-ring = "0.16.20"
+rpassword = "7.0.0"
 sha2 = "0.10.6"
 hex = "0.4.3"

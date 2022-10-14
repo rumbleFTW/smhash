@@ -1,9 +1,3 @@
-extern crate clipboard;
-extern crate ring;
-
-// use ring::aead::*;
-// use ring::pbkdf2::*;
-// use ring::rand::SystemRandom;
 use hex;
 use sha2::{Sha512, Digest};
 use std::env;
@@ -21,14 +15,50 @@ struct Credentials {
     text: String,
 }
 
+fn init() {
+
+    // Initializing the MASTER and VAULT files
+
+    if std::fs::metadata("/Users/rumbleftw/Documents/Codes/smhash/src/VAULT").is_ok() || std::fs::metadata("/Users/rumbleftw/Documents/Codes/smhash/src/MASTER").is_ok()  {
+        println!("User files detected, please purge all the previous files by running $ smhash purge all");
+        return;
+    }
+    std::fs::File::create("/Users/rumbleftw/Documents/Codes/smhash/src/VAULT").expect("Couldn't create VAULT!");
+    std::fs::File::create("/Users/rumbleftw/Documents/Codes/smhash/src/VAULT").expect("Couldn't create VAULT!");
+    println!("Enter a new smhash Master Password:");
+    let passwd1 = rpassword::read_password().unwrap();
+    println!("Re-enter new smhash Master Password:");
+    let passwd2 = rpassword::read_password().unwrap();
+    if passwd1 == passwd2 {
+        let mut hasher = Sha512::new();
+        hasher.update(passwd1);
+        let hashed_pass = hex::encode(hasher.finalize());
+        fs::write("/Users/rumbleftw/Documents/Codes/smhash/src/MASTER", hashed_pass).expect("Could not update MASTER file :/");
+    }
+    println!("All set! Add a new credential by running $ smhash add");
+}
+
+fn purge(all: bool) {
+
+    // Purges all files related to the program
+
+    if all {
+        std::fs::remove_file("/Users/rumbleftw/Documents/Codes/smhash/src/MASTER").expect("Couldn't purge MASTER!");
+        std::fs::remove_file("/Users/rumbleftw/Documents/Codes/smhash/src/VAULT").expect("Couldn't purge VAULT!");
+    }
+    else {
+        std::fs::remove_file("/Users/rumbleftw/Documents/Codes/smhash/src/VAULT").expect("Couldn't purge VAULT!");
+    }
+    println!("Purge successful!");
+}
+
 fn authenticate() -> bool {
 
     // Authenticates the master password
 
     let hashed_master = fs::read_to_string("/Users/rumbleftw/Documents/Codes/smhash/src/MASTER").expect("MASTER file missing!");
-    let mut passwd: String = String::new();
-    println!("Enter your shash Master Password:");
-    std::io::stdin().read_line(&mut passwd).unwrap();
+    println!("Enter your smhash Master Password:");
+    let passwd = rpassword::read_password().unwrap();
     let mut hasher = Sha512::new();
     hasher.update(passwd);
     let hashed_pass = hex::encode(hasher.finalize());
@@ -93,6 +123,16 @@ fn get(query: String, creds: Credentials, verbose: bool) {
     ctx.set_contents(creds.password[idx as usize].to_owned()).unwrap();
 }
 
+fn import(path: &String) {
+    if !std::fs::metadata(&path).is_ok() {
+        println!("Invalid path");
+        return;
+    }
+    let data: String = fs::read_to_string(&path).expect("Unexpected error!");
+    fs::write("/Users/rumbleftw/Documents/Codes/smhash/src/VAULT", data).expect("Unexpected error!");
+    println!("Import successful!");
+}
+
 fn add() {
     let mut payload: String = fs::read_to_string("/Users/rumbleftw/Documents/Codes/smhash/src/VAULT").expect("VAULT file missing! :/");
     println!("Enter the Credential service:");
@@ -143,4 +183,33 @@ fn main() {
             println!("Invalid Master Password!");
         }
     }
+
+    else if query == "purge" {
+        if authenticate() {
+            if args.contains(&"all".to_string()) {
+                purge(true);
+            }
+            else {
+                purge(false);
+            }
+        }
+        else {
+            println!("Invalid Master Password!");
+        }
+    }
+
+    else if query == "init" {
+        init();
+    }
+
+    else if query == "import" {
+        if authenticate() {
+            let path = &args[2].strip_prefix("--path=").expect("Invalid argument").to_string();
+            import(path);
+        }
+        else {
+            println!("Invalid Master Password!");
+        }
+    }
+
 }
