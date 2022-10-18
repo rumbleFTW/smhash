@@ -2,8 +2,13 @@ use hex;
 use sha2::{Sha512, Digest};
 use std::env;
 use std::fs;
+use std::io;
 use clipboard::ClipboardProvider;
 use clipboard::ClipboardContext;
+use aes_gcm_siv::{
+    aead::{AeadInPlace, KeyInit, OsRng},
+    Aes256GcmSiv, Nonce, // Or `Aes128GcmSiv`
+};
 
 struct Credentials {
 
@@ -15,6 +20,8 @@ struct Credentials {
     text: String,
 }
 
+
+
 fn init() {
 
     // Initializing the MASTER and VAULT files
@@ -23,19 +30,22 @@ fn init() {
         println!("User files detected, please purge all the previous files by running $ smhash purge all");
         return;
     }
-    std::fs::File::create("/Users/rumbleftw/Documents/Codes/smhash/src/VAULT").expect("Couldn't create VAULT!");
-    std::fs::File::create("/Users/rumbleftw/Documents/Codes/smhash/src/VAULT").expect("Couldn't create VAULT!");
     println!("Enter a new smhash Master Password:");
     let passwd1 = rpassword::read_password().unwrap();
     println!("Re-enter new smhash Master Password:");
     let passwd2 = rpassword::read_password().unwrap();
     if passwd1 == passwd2 {
+        std::fs::File::create("/Users/rumbleftw/Documents/Codes/smhash/src/VAULT").expect("Couldn't create VAULT!");
+        std::fs::File::create("/Users/rumbleftw/Documents/Codes/smhash/src/MASTER").expect("Couldn't create MASTER!");
         let mut hasher = Sha512::new();
-        hasher.update(passwd1);
+        hasher.update(&passwd1[..passwd1.len()-1]);
         let hashed_pass = hex::encode(hasher.finalize());
         fs::write("/Users/rumbleftw/Documents/Codes/smhash/src/MASTER", hashed_pass).expect("Could not update MASTER file :/");
+        println!("All set! Add a new credential by running $ smhash add");
     }
-    println!("All set! Add a new credential by running $ smhash add");
+    else {
+        println!("The passwords do not match!");
+    }
 }
 
 fn purge(all: bool) {
@@ -136,16 +146,34 @@ fn import(path: &String) {
 fn add() {
     let mut payload: String = fs::read_to_string("/Users/rumbleftw/Documents/Codes/smhash/src/VAULT").expect("VAULT file missing! :/");
     println!("Enter the Credential service:");
+    let mut cred = String::new();
+    io::stdin().read_line(&mut cred).expect("Please enter a service name!");
+    let mut id: String = String::new();
     println!("Enter the Username/ID:");
+    io::stdin().read_line(&mut id).expect("Please enter an ID!");
     println!("Enter the Password:");
-    payload = payload + &"\nHalo".to_string();
+    let passwd = rpassword::read_password().unwrap();
+    payload = payload+&cred[..cred.len()-1]+","+&id[..id.len()-1]+","+&passwd+"\n";
+
+    let key = Aes256GcmSiv::generate_key(&mut OsRng);
+    let cipher = Aes256GcmSiv::new(&key);
+    let nonce = Nonce::from_slice(b"unique nonce");
+    let mut buffer = Vec::new();
+    buffer.extend_from_slice(&payload.as_bytes());
+    cipher.encrypt_in_place(nonce, b"", &mut buffer).expect("...");
+    println!("{}", hex::encode(&buffer));
+    cipher.decrypt_in_place(nonce, b"", &mut buffer).expect("...");
+    println!("{}", hex::encode(&buffer));
+
     fs::write("/Users/rumbleftw/Documents/Codes/smhash/src/VAULT", payload).expect("Could not update VAULT file :/");
+    println!("Credentials added successfully.");
 }
 
 fn main() {
     let args: Vec<String> = env::args().collect();
     println!("Args recieved: {:?}", args);
     let query = &args[1];
+
     if query == "dump" {
         if authenticate() {
             let creds = load_creds();
@@ -155,11 +183,6 @@ fn main() {
             println!("Invalid Master Password!");
         } 
     }
-
-    // else if query == "search" {
-    //     let creds = load_creds();
-    //     search("net".to_string(), &creds);
-    // }
 
     else if query == "get" {
         if authenticate() {
